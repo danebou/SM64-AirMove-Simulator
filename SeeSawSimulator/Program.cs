@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -59,7 +60,7 @@ namespace SeeSawSimulator
 
         static readonly List<Point> SeeSawPoints = new List<Point>()
         {
-            new Point(-511, 179, 307),  
+            new Point(-511, 179, 307),
             new Point(512, 179, 307),
             new Point(512, 179, -306),
             new Point(512, 26, -306),
@@ -72,7 +73,7 @@ namespace SeeSawSimulator
         static readonly List<int[]> SeeSawTriangleVertexIndices = new List<int[]>() {
            new int[3] { 00, 01, 02 },
            new int[3] { 05, 01, 00 },
-       
+
            new int[3] { 05, 04, 01 },
            new int[3] { 04, 05, 06 },
 
@@ -108,16 +109,23 @@ namespace SeeSawSimulator
 
         static List<Point> SeeSawGapPoints(ushort angle)
         {
-            List<Tuple<int, int>> gapEdgesAngles = new List<Tuple<int, int>>();
+            List<Point> gapPoints = new List<Point>();
             List<Triangle> rotatedHitBox = CreateTriangles(SeeSawPoints, angle, 0, 0);
             for (int i = 0; i + 1 < rotatedHitBox.Count; i += 2)
             {
-                if (EdgeHasGap(rotatedHitBox[i], rotatedHitBox[i + 1]))
-                {
-                    gapEdgesAngles.Add(i / 2);
-                } 
+                gapPoints.AddRange(EdgeHasGap(rotatedHitBox[i], rotatedHitBox[i + 1]));
             }
-            return gapEdgesAngles;
+            return gapPoints;
+        }
+
+        static bool inCCWTriangle(float x, float z, Triangle tri)
+        {
+            // (z1 - a3) * (x2 - x1) < (x1 - a1) * (z2 - z1) 
+            return ((tri.Vertices[0].Z - z) * (tri.Vertices[1].X - tri.Vertices[0].X) <= (tri.Vertices[0].X - x) * (tri.Vertices[1].Z - tri.Vertices[0].Z)
+                // (z2 - a3) * (x3 - x2) < (x2 - a1) * (z3 - z2)
+                && (tri.Vertices[1].Z - z) * (tri.Vertices[2].X - tri.Vertices[1].X) <= (tri.Vertices[1].X - x) * (tri.Vertices[2].Z - tri.Vertices[1].Z)
+                // (z3 - a3) * (x1 - x3) < (x3 - a1) * (z1 - z3)
+                && (tri.Vertices[2].Z - z) * (tri.Vertices[0].X - tri.Vertices[2].X) <= (tri.Vertices[2].X - x) * (tri.Vertices[0].Z - tri.Vertices[2].Z));
         }
 
         static List<Triangle> CreateTriangles(List<Point> points, ushort angleX, ushort angleY, ushort angleZ)
@@ -137,7 +145,7 @@ namespace SeeSawSimulator
             };
 
             List<Point> transformedPoints = new List<Point>();
-            foreach(var point in points)
+            foreach (var point in points)
             {
                 transformedPoints.Add(new Point(
                     (short)Math.Truncate(SeeSawPosition.X + transMatrix[0, 0] * point.X + transMatrix[0, 1] * point.Y + transMatrix[0, 2] * point.Z),
@@ -147,7 +155,7 @@ namespace SeeSawSimulator
             }
 
             List<Triangle> triangles = new List<Triangle>();
-            foreach(var vertextTriGroup in SeeSawTriangleVertexIndices)
+            foreach (var vertextTriGroup in SeeSawTriangleVertexIndices)
             {
                 Point p1 = transformedPoints[vertextTriGroup[0]];
                 Point p2 = transformedPoints[vertextTriGroup[1]];
@@ -160,14 +168,94 @@ namespace SeeSawSimulator
 
         static List<Point> EdgeHasGap(Triangle t1, Triangle t2)
         {
-            //float yPos = t1.Vertices[0].Y + t1.Vertices
+            // Find z and x coordinates
+            List<Point> gapPoints = new List<Point>();
+            short? t1x = common(t1.Vertices[0].X, t1.Vertices[1].X, t1.Vertices[2].X);
+            short? t2x = common(t2.Vertices[0].X, t2.Vertices[1].X, t2.Vertices[2].X);
+            if (!t1x.HasValue || !t2x.HasValue || Math.Abs(t1x.Value - t2x.Value) != 1023)
+            {
+                Trace.WriteLine("Weirdness Occured");
+                Debugger.Break();
+            }
+            if (t1x > t2x)
+            {
+                short? temp = t1x;
+                t1x = t2x;
+                t2x = temp;
+            }
+            short? t1z = common(t1.Vertices[0].Z, t1.Vertices[1].Z, t1.Vertices[2].Z);
+            short? t2z = common(t2.Vertices[0].Z, t2.Vertices[1].Z, t2.Vertices[2].Z);
+            if (!t1z.HasValue || !t2z.HasValue || t1z != t2z)
+            {
+                Trace.WriteLine("Weirdness Occured");
+                Debugger.Break();
+            }
+            short baseZ = t1z.Value;
 
-            return false;
+            // Iterate over z and x values
+            for (short x = (short)(t1x.Value - 2); x <= t2x.Value + 2; x++)
+            {
+                for (short z = (short)(baseZ - 2); z <= baseZ + 2; z++)
+                {
+                    if (PointHasGap(t1, t2, x, z))
+                    {
+                        gapPoints.Add(new Point(x, z, 0));
+                    }
+                }
+            }
+
+            return gapPoints;
+        }
+
+        static bool PointHasGap(Triangle t1, Triangle t2, short x, short z)
+        {
+            // Find floor and ceiling triangles (and verify a floor and ceiling triangle exist)
+            Triangle floorTri, ceilTri;
+            if (0.01 < t1.NormalY)
+            {
+                floorTri = t1;
+                ceilTri = t2;
+            }
+            else
+            {
+                floorTri = t1;
+                ceilTri = t2;
+            }
+            if (0.1 >= floorTri.NormalY || ceilTri.NormalY >= -0.01)
+                return false;
+
+            // Verify point in triangle
+            if (!inCCWTriangle(x, z, floorTri))
+                return false;
+            if (!inCCWTriangle(x, z, ceilTri))
+                return false;
+
+            float floorY = triangleHeight(x, z, floorTri);
+            float ceilY = triangleHeight(x, z, ceilTri);
+
+            //if (ceilY - floorY <= 2)
+                //return false;
+
+            return true;
+        }
+
+        static short? common(short v1, short v2, short v3)
+        {
+            if (v1 == v2)
+                return v1;
+
+            if (v2 == v3)
+                return v2;
+
+            if (v1 == v3)
+                return v3;
+
+            return null;
         }
 
         static float triangleHeight(float x, float z, Triangle tri)
         {
-            return -((tri.NormalX * x) + (tri.NormalZ * z) + tri.Offset) / tri.NormalY;
+            return -((x * tri.NormalX) + (z * tri.NormalZ) + tri.Offset) / tri.NormalY;
         }
 
         static float sin(ushort angle)
@@ -181,4 +269,5 @@ namespace SeeSawSimulator
             ushort truncAngle = (ushort)((angle / 16) * 16);
             return (float)Math.Cos((truncAngle) / 65536d * Math.PI * 2);
         }
+    }
 }
