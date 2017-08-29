@@ -25,6 +25,16 @@ namespace SeeSawSimulator
                 return new Point((short)(p1.X - p2.X), (short)(p1.Y - p2.Y), (short)(p1.Z - p2.Z));
             }
 
+            public static bool operator ==(Point p1, Point p2)
+            {
+                return (p1.X == p2.X && p1.Y == p2.Y && p1.Z == p2.Z);
+            }
+
+            public static bool operator !=(Point p1, Point p2)
+            {
+                return !(p1 == p2);
+            }
+
             public override string ToString()
             {
                 return String.Format("({0}, {1}, {2})", X, Y, Z);
@@ -33,7 +43,9 @@ namespace SeeSawSimulator
 
         struct Triangle
         {
-            public Point[] Vertices;
+            public Point Vertex1;
+            public Point Vertex2;
+            public Point Vertex3;
             public float Offset;
             public float NormalX;
             public float NormalY;
@@ -42,7 +54,9 @@ namespace SeeSawSimulator
             // Create triangle from three points
             public Triangle(Point p1, Point p2, Point p3)
             {
-                Vertices = new Point[3] { p1, p2, p3 };
+                Vertex1 = p1;
+                Vertex2 = p2;
+                Vertex3 = p3;
 
                 // Calculate two lines to create triangle from
                 Point line1 = p1 - p2;
@@ -69,17 +83,17 @@ namespace SeeSawSimulator
                 if (reverse)
                 {
                     Triangle revTri = this;
-                    revTri.Vertices[1] = Vertices[2];
-                    revTri.Vertices[2] = Vertices[1];
+                    revTri.Vertex2 = Vertex3;
+                    revTri.Vertex3 = Vertex2;
                     return revTri.inCCWTriangle(x, z, false);
                 }
 
                 // (z1 - z) * (x2 - x1) <= (x1 - x) * (z2 - z1) 
-                return ((Vertices[0].Z - z) * (Vertices[1].X - Vertices[0].X) <= (Vertices[0].X - x) * (Vertices[1].Z - Vertices[0].Z)
+                return ((Vertex1.Z - z) * (Vertex2.X - Vertex1.X) <= (Vertex1.X - x) * (Vertex2.Z - Vertex1.Z)
                     // (z2 - z) * (x3 - x2) <= (x2 - x) * (z3 - z2)
-                    && (Vertices[1].Z - z) * (Vertices[2].X - Vertices[1].X) <= (Vertices[1].X - x) * (Vertices[2].Z - Vertices[1].Z)
+                    && (Vertex2.Z - z) * (Vertex3.X - Vertex2.X) <= (Vertex2.X - x) * (Vertex3.Z - Vertex2.Z)
                     // (z3 - z) * (x1 - x3) <= (x3 - x) * (z1 - z3)
-                    && (Vertices[2].Z - z) * (Vertices[0].X - Vertices[2].X) <= (Vertices[2].X - x) * (Vertices[0].Z - Vertices[2].Z));
+                    && (Vertex3.Z - z) * (Vertex1.X - Vertex3.X) <= (Vertex3.X - x) * (Vertex1.Z - Vertex3.Z));
             }
         }
 
@@ -119,7 +133,10 @@ namespace SeeSawSimulator
 
         // Position of the seesaws
         static readonly Point SeeSawPosition = new Point(4454, -2226, 266); // First seesaw
-        //static readonly Point SeeSawPosition = new Point(5786, -2380, 266); // Second seesaw                                                            
+                                                                            //static readonly Point SeeSawPosition = new Point(5786, -2380, 266); // Second seesaw                                                            
+
+        // The maximum gap found
+        static float maxGap = 0;
 
         static void Main(string[] args)
         {
@@ -211,8 +228,8 @@ namespace SeeSawSimulator
 
             // Find x coordinates of edge (start and stop)
             // All edges run parallel to x axis
-            short? t1x = common(t1.Vertices[0].X, t1.Vertices[1].X, t1.Vertices[2].X);
-            short? t2x = common(t2.Vertices[0].X, t2.Vertices[1].X, t2.Vertices[2].X);
+            short? t1x = common(t1.Vertex1.X, t1.Vertex2.X, t1.Vertex3.X);
+            short? t2x = common(t2.Vertex1.X, t2.Vertex2.X, t2.Vertex3.X);
 
             // Expect that each triangle has a pair of vertices which share the same x value
             // Also test that the edge length is expected to be 1023.
@@ -233,8 +250,8 @@ namespace SeeSawSimulator
             }
 
             // Find the z coordinate of the edge
-            short? t1z = common(t1.Vertices[0].Z, t1.Vertices[1].Z, t1.Vertices[2].Z);
-            short? t2z = common(t2.Vertices[0].Z, t2.Vertices[1].Z, t2.Vertices[2].Z);
+            short? t1z = common(t1.Vertex1.Z, t1.Vertex2.Z, t1.Vertex3.Z);
+            short? t2z = common(t2.Vertex1.Z, t2.Vertex2.Z, t2.Vertex3.Z);
 
             // Expect that each triangle has a pair of vertices which share the same z value
             // Also test that both triangles' individual edge has the same z coordinate (the edges should be the same edge)
@@ -295,8 +312,11 @@ namespace SeeSawSimulator
             float floorY = triangleHeight(x, z, floorTri);
             float ceilY = triangleHeight(x, z, ceilTri);
 
+            if (ceilY - floorY > maxGap)
+                maxGap = ceilY - floorY;
+
             // Check that the gap size is less than (or equal to 2)
-            if (ceilY - floorY <= 2)
+            if (ceilY - floorY < 2)
                 return false;
 
             // All conditions for RLB met

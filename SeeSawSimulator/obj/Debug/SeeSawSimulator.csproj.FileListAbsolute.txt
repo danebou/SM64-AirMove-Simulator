@@ -1,1 +1,6 @@
 C:\Users\daneb\Source\Repos\SM64-Seesaw-Simulator\SeeSawSimulator\obj\Debug\SeeSawSimulator.csprojResolveAssemblyReference.cache
+C:\Users\daneb\Source\Repos\SM64-Seesaw-Simulator\SeeSawSimulator\bin\Debug\SeeSawSimulator.exe.config
+C:\Users\daneb\Source\Repos\SM64-Seesaw-Simulator\SeeSawSimulator\bin\Debug\SeeSawSimulator.exe
+C:\Users\daneb\Source\Repos\SM64-Seesaw-Simulator\SeeSawSimulator\bin\Debug\SeeSawSimulator.pdb
+C:\Users\daneb\Source\Repos\SM64-Seesaw-Simulator\SeeSawSimulator\obj\Debug\SeeSawSimulator.exe
+C:\Users\daneb\Source\Repos\SM64-Seesaw-Simulator\SeeSawSimulator\obj\Debug\SeeSawSimulator.pdb
